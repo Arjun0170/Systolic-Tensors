@@ -1,31 +1,31 @@
 `timescale 1ns/10ps
 module systolic_array #(
-    parameter int ROWS = 64,
-    parameter int COLS = 64,
-    parameter int IP_WIDTH = 8,
-    parameter int OP_WIDTH = 48
+    parameter int rows = 64,
+    parameter int cols = 64,
+    parameter int ip_width = 8,
+    parameter int op_width = 48
 )(
     input  logic clk,
     input  logic rst,
     input  logic en,
     input  logic clr,
-    input  logic [ROWS*IP_WIDTH-1:0] input_matrix,
-    input  logic [COLS*IP_WIDTH-1:0] weight_matrix,
+    input  logic [rows*ip_width-1:0] input_matrix,
+    input  logic [cols*ip_width-1:0] weight_matrix,
     output logic compute_done,
     output logic [31:0] cycles_count,
-    output logic [ROWS*COLS*OP_WIDTH-1:0] output_matrix
+    output logic [rows*cols*op_width-1:0] output_matrix
 );
 
-    wire signed [IP_WIDTH-1:0] x_grid [ROWS][COLS+1];
-    wire signed [IP_WIDTH-1:0] w_grid [ROWS+1][COLS];
-    wire en_grid  [ROWS][COLS+1];
-    wire clr_grid [ROWS][COLS+1];
+    wire signed [ip_width-1:0] x_grid [rows][cols+1];
+    wire signed [ip_width-1:0] w_grid [rows+1][cols];
+    wire en_grid  [rows][cols+1];
+    wire clr_grid [rows][cols+1];
 
     genvar i, j;
 
     generate
-        for (i = 0; i < ROWS; i++) begin : ROW_INPUT_SKEW
-            logic signed [IP_WIDTH-1:0] x_delay_line [0:i];
+        for (i = 0; i < rows; i++) begin : row_input_skew
+            logic signed [ip_width-1:0] x_delay_line [0:i];
             logic en_delay_line  [0:i];
             logic clr_delay_line [0:i];
 
@@ -37,7 +37,7 @@ module systolic_array #(
                         clr_delay_line[k] <= '0;
                     end
                 end else begin
-                    x_delay_line[0]   <= en ? input_matrix[(i+1)*IP_WIDTH-1 -: IP_WIDTH] : '0;
+                    x_delay_line[0]   <= en ? input_matrix[(i+1)*ip_width-1 -: ip_width] : '0;
                     en_delay_line[0]  <= en;
                     clr_delay_line[0] <= en ? clr : 1'b0;
                     for (int k = 1; k <= i; k++) begin
@@ -55,8 +55,8 @@ module systolic_array #(
     endgenerate
 
     generate
-        for (j = 0; j < COLS; j++) begin : COL_INPUT_SKEW
-            logic signed [IP_WIDTH-1:0] w_delay_line [0:j];
+        for (j = 0; j < cols; j++) begin : col_input_skew
+            logic signed [ip_width-1:0] w_delay_line [0:j];
             logic en_delay_line  [0:j];
             logic clr_delay_line [0:j];
 
@@ -68,7 +68,7 @@ module systolic_array #(
                         clr_delay_line[k] <= '0;
                     end
                 end else begin
-                    w_delay_line[0]   <= en ? weight_matrix[(j+1)*IP_WIDTH-1 -: IP_WIDTH] : '0;
+                    w_delay_line[0]   <= en ? weight_matrix[(j+1)*ip_width-1 -: ip_width] : '0;
                     en_delay_line[0]  <= en;
                     clr_delay_line[0] <= en ? clr : 1'b0;
                     for (int k = 1; k <= j; k++) begin
@@ -84,11 +84,11 @@ module systolic_array #(
     endgenerate
 
     generate
-        for (i = 0; i < ROWS; i++) begin : PE_ROWS
-            for (j = 0; j < COLS; j++) begin : PE_COLS
+        for (i = 0; i < rows; i++) begin : PE_rows
+            for (j = 0; j < cols; j++) begin : PE_cols
                 mac_unit #(
-                    .IP_size(IP_WIDTH),
-                    .OP_size(OP_WIDTH)
+                    .IP_size(ip_width),
+                    .OP_size(op_width)
                 ) pe_inst (
                     .clk(clk),
                     .rst(rst),
@@ -103,14 +103,14 @@ module systolic_array #(
                     .x_old(x_grid[i][j+1]),
                     .w_old(w_grid[i+1][j]),
 
-                    .mac_out(output_matrix[(i*COLS + j)*OP_WIDTH +: OP_WIDTH])
+                    .mac_out(output_matrix[(i*cols + j)*op_width +: op_width])
                 );
             end
         end
     endgenerate
 
     localparam int pipe_lat  = 3;
-    localparam int flush_lat = (ROWS-1) + (COLS-1) + PIPE_LAT;
+    localparam int flush_lat = (rows-1) + (cols-1) + pipe_lat;
 
     logic en_prev;
     logic running;
