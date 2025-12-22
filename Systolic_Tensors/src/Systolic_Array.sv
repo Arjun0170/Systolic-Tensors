@@ -1,31 +1,37 @@
 `timescale 1ns/10ps
+
 module systolic_array #(
-    parameter int rows = 64,
-    parameter int cols = 64,
-    parameter int ip_width = 8,
-    parameter int op_width = 48
+    parameter int ROWS = 64,
+    parameter int COLS = 64,
+    parameter int IP_WIDTH = 8,
+    parameter int OP_WIDTH = 48,
+    parameter int PIPE_LAT = 3
 )(
     input  logic clk,
     input  logic rst,
+
     input  logic en,
     input  logic clr,
-    input  logic [rows*ip_width-1:0] input_matrix,
-    input  logic [cols*ip_width-1:0] weight_matrix,
+    
+    input  logic [ROWS*IP_WIDTH-1:0] input_matrix,
+    input  logic [COLS*IP_WIDTH-1:0] weight_matrix,
+    
     output logic compute_done,
     output logic [31:0] cycles_count,
-    output logic [rows*cols*op_width-1:0] output_matrix
+    
+    output logic [ROWS*COLS*OP_WIDTH-1:0] output_matrix
 );
 
-    wire signed [ip_width-1:0] x_grid [rows][cols+1];
-    wire signed [ip_width-1:0] w_grid [rows+1][cols];
-    wire en_grid  [rows][cols+1];
-    wire clr_grid [rows][cols+1];
+    wire signed [IP_WIDTH-1:0] x_grid [ROWS][COLS+1];
+    wire signed [IP_WIDTH-1:0] w_grid [ROWS+1][COLS];
+    wire en_grid  [ROWS][COLS+1];
+    wire clr_grid [ROWS][COLS+1];
 
     genvar i, j;
 
     generate
-        for (i = 0; i < rows; i++) begin : row_input_skew
-            logic signed [ip_width-1:0] x_delay_line [0:i];
+        for (i = 0; i < ROWS; i++) begin : row_input_skew
+            logic signed [IP_WIDTH-1:0] x_delay_line [0:i];
             logic en_delay_line  [0:i];
             logic clr_delay_line [0:i];
 
@@ -37,9 +43,10 @@ module systolic_array #(
                         clr_delay_line[k] <= '0;
                     end
                 end else begin
-                    x_delay_line[0]   <= en ? input_matrix[(i+1)*ip_width-1 -: ip_width] : '0;
+                    x_delay_line[0]   <= input_matrix[(i+1)*IP_WIDTH-1 -: IP_WIDTH]; 
                     en_delay_line[0]  <= en;
-                    clr_delay_line[0] <= en ? clr : 1'b0;
+                    clr_delay_line[0] <= en & clr;
+
                     for (int k = 1; k <= i; k++) begin
                         x_delay_line[k]   <= x_delay_line[k-1];
                         en_delay_line[k]  <= en_delay_line[k-1];
@@ -55,8 +62,8 @@ module systolic_array #(
     endgenerate
 
     generate
-        for (j = 0; j < cols; j++) begin : col_input_skew
-            logic signed [ip_width-1:0] w_delay_line [0:j];
+        for (j = 0; j < COLS; j++) begin : col_input_skew
+            logic signed [IP_WIDTH-1:0] w_delay_line [0:j];
             logic en_delay_line  [0:j];
             logic clr_delay_line [0:j];
 
@@ -68,9 +75,10 @@ module systolic_array #(
                         clr_delay_line[k] <= '0;
                     end
                 end else begin
-                    w_delay_line[0]   <= en ? weight_matrix[(j+1)*ip_width-1 -: ip_width] : '0;
+                    w_delay_line[0]   <= weight_matrix[(j+1)*IP_WIDTH-1 -: IP_WIDTH];
                     en_delay_line[0]  <= en;
-                    clr_delay_line[0] <= en ? clr : 1'b0;
+                    clr_delay_line[0] <= en & clr;
+
                     for (int k = 1; k <= j; k++) begin
                         w_delay_line[k]   <= w_delay_line[k-1];
                         en_delay_line[k]  <= en_delay_line[k-1];
@@ -84,68 +92,56 @@ module systolic_array #(
     endgenerate
 
     generate
-        for (i = 0; i < rows; i++) begin : PE_rows
-            for (j = 0; j < cols; j++) begin : PE_cols
+        for (i = 0; i < ROWS; i++) begin : PE_rows
+            for (j = 0; j < COLS; j++) begin : PE_cols
                 mac_unit #(
-                    .IP_size(ip_width),
-                    .OP_size(op_width)
+                    .IP_size(IP_WIDTH),
+                    .OP_size(OP_WIDTH),
+                    .clr_load_first(1'b1)
                 ) pe_inst (
                     .clk(clk),
                     .rst(rst),
-
                     .en_in (en_grid[i][j]),
                     .clr_in(clr_grid[i][j]),
                     .en_out(en_grid[i][j+1]),
                     .clr_out(clr_grid[i][j+1]),
-
                     .x_new(x_grid[i][j]),
                     .w_new(w_grid[i][j]),
                     .x_old(x_grid[i][j+1]),
                     .w_old(w_grid[i+1][j]),
-
-                    .mac_out(output_matrix[(i*cols + j)*op_width +: op_width])
+                    .mac_out(output_matrix[(i*COLS + j)*OP_WIDTH +: OP_WIDTH])
                 );
             end
         end
     endgenerate
 
-    localparam int pipe_lat  = 3;
-    localparam int flush_lat = (rows-1) + (cols-1) + pipe_lat;
+    localparam int SKEW_LATENCY   = (ROWS - 1) + (COLS - 1);
+    localparam int TOTAL_LATENCY  = SKEW_LATENCY + PIPE_LAT;
 
-    logic en_prev;
-    logic running;
-    logic [31:0] flush_count;
+    logic [31:0] active_tokens;
+    logic array_idle;
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            cycles_count <= 32'd0;
+            cycles_count <= '0;
             compute_done <= 1'b0;
-            en_prev      <= 1'b0;
-            running      <= 1'b0;
-            flush_count  <= 32'd0;
+            active_tokens <= '0;
+            array_idle <= 1'b1;
         end else begin
-            en_prev <= en;
-
-            if (!running && en && !en_prev) begin
-                running      <= 1'b1;
+            if (!array_idle) begin
+                cycles_count <= cycles_count + 1;
+            end
+            
+            if (en) begin
+                array_idle <= 1'b0;
                 compute_done <= 1'b0;
-                cycles_count <= 32'd0;
-                flush_count  <= 32'd0;
-            end else if (running) begin
-                if (en) begin
-                    cycles_count <= cycles_count + 32'd1;
-                    flush_count  <= 32'd0;
+                active_tokens <= TOTAL_LATENCY;
+            end else if (!array_idle) begin
+                if (active_tokens != 0) begin
+                    active_tokens <= active_tokens - 1;
                 end else begin
-                    if (flush_count == 32'd0)
-                        flush_count <= 32'd1;
-                    else
-                        flush_count <= flush_count + 32'd1;
-
-                    if (flush_count == flush_lat[31:0]) begin
-                        compute_done <= 1'b1;
-                        running      <= 1'b0;
-                        flush_count  <= 32'd0;
-                    end
+                    compute_done <= 1'b1;
+                    array_idle <= 1'b1;
                 end
             end
         end
