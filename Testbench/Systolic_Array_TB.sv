@@ -2,29 +2,29 @@
 
 module systolic_array_tb;
 
-    parameter int ROWS = 64;
-    parameter int COLS = 64;
-    parameter int IP_WIDTH = 8;
-    parameter int OP_WIDTH = 48;
-    parameter int K_DIM = 128;
+    parameter int rows = 64;
+    parameter int cols = 64;
+    parameter int ip_width = 8;
+    parameter int op_width = 48;
+    parameter int k_dim = 128;
     
     logic clk;
     logic rst;
     logic en;
     logic clr;
-    logic [ROWS*IP_WIDTH-1:0] input_matrix;
-    logic [COLS*IP_WIDTH-1:0] weight_matrix;
+    logic [rows*ip_width-1:0] input_matrix;
+    logic [cols*ip_width-1:0] weight_matrix;
     logic compute_done;
     logic [31:0] cycles_count;
-    logic [ROWS*COLS*OP_WIDTH-1:0] output_matrix;
+    logic [rows*cols*op_width-1:0] output_matrix;
     
-    logic [ROWS*IP_WIDTH-1:0] inputs_mem [0:K_DIM-1];
-    logic [COLS*IP_WIDTH-1:0] weights_mem [0:K_DIM-1];
-    logic [ROWS*COLS*OP_WIDTH-1:0] golden_ref_mem [0:0];
+    logic [rows*ip_width-1:0] inputs_mem [0:k_dim-1];
+    logic [cols*ip_width-1:0] weights_mem [0:k_dim-1];
+    logic [rows*cols*op_width-1:0] golden_ref_mem [0:0];
 
     systolic_array #(
-        .ROWS(ROWS), .COLS(COLS), 
-        .IP_WIDTH(IP_WIDTH), .OP_WIDTH(OP_WIDTH)
+        .rows(rows), .cols(cols), 
+        .ip_width(ip_width), .op_width(op_width)
     ) dut (.*);
 
     always #5 clk = ~clk;
@@ -42,7 +42,7 @@ module systolic_array_tb;
         @(posedge clk);
         #1;
         
-        for (int k=0; k < K_DIM; k++) begin
+        for (int k=0; k < k_dim; k++) begin
             en = 1;
             clr = (k == 0);
             input_matrix = inputs_mem[k];
@@ -58,7 +58,7 @@ module systolic_array_tb;
         
         #10;
         if (output_matrix == golden_ref_mem[0]) begin
-            $display("TEST PASSED! Dimensions: %0dx%0d", ROWS, COLS);
+            $display("TEST PASSED! Dimensions: %0dx%0d", rows, cols);
         end else begin
             $display("TEST FAILED!");
             $display("Expected: %h", golden_ref_mem[0]);
