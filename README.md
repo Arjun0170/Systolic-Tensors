@@ -12,7 +12,7 @@ A parametric, synthesizable systolic array for matrix multiplication, written in
 - `systolic_array.sv` — Top-level array (skewing + PE grid + done/cycle logic)
 - `mac_unit.sv` — Processing element (pipelined MAC)
 - `Systolic_Array_TB.sv` — SystemVerilog testbench (file-driven)
-- `gen_vectors.py` — Generates:
+- `Test_generator_script.py` — Generates:
   - `input_matrix.hex`
   - `weight_matrix.hex`
   - `golden_output.hex`
