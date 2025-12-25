@@ -48,7 +48,7 @@ def gen_systolic_vectors(rows, cols, ip_width, op_width, k_dim):
     # 5. Write Golden Output Hex
     # Single line containing the entire flattened result matrix.
     # Order: (0,0) is LSB, (0,1)... (Rows,Cols) is MSB.
-    # Matches Verilog: output_matrix[(i*cols + j)*op_width +: op_width]
+    # Matches output_matrix[(i*cols + j)*op_width +: op_width]
     with open("golden_output.hex", "w") as fc:
         flat_C = 0
         total_bits = rows * cols * op_width
