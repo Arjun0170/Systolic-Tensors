@@ -93,7 +93,6 @@ module mac_unit #(
     // Robust Accumulation (Stage 4)
     // =========================================================================
 
-    logic signed [prod_w-1:0] s2_p;
     always_ff @(posedge clk) begin
         if (rst) begin
             mac_out <= '0;
