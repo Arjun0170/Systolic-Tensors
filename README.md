@@ -51,11 +51,6 @@ Expected output:
 - All arithmetic is signed end-to-end (inputs, product, sign-extension, accumulation).
 - The design is written to be tool-friendly for open-source flows (Verilator/Yosys-style discipline).
 
-## License
-Choose one:
-- MIT / Apache-2.0 (recommended for maximum reuse)
-- Or “All Rights Reserved” if keeping it closed for now
-
 ## Author
 - Arjun Tandon
 - Github -> https://github.com/Arjun0170
