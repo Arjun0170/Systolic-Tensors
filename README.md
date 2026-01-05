@@ -31,7 +31,7 @@ A parametric, synthesizable systolic array for matrix multiplication, written in
 verilator --binary --timing --top-module systolic_array_tb
 Systolic_Array_TB.sv systolic_array.sv mac_unit.sv
 
-./obj_dir/Vsystolic_array_tb
+./obj_dir/systolic_array_tb
 ```
 
 Expected output:
