@@ -23,8 +23,6 @@ module mac_unit #(
     // =========================================================================
     // Robust Multiply-Accumulate Pipeline (Stage 1)
     // =========================================================================
-
-    logic signed [prod_w-1:0] s2_p;
     logic signed [IP_size-1:0] s1_x, s1_w;
     logic v1, c1;
 
