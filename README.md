@@ -54,6 +54,6 @@ Expected output:
 ## Author
 - Arjun Tandon
 - Github -> https://github.com/Arjun0170
-- Linkedin -> https://www.linkedin.com/in/arjun-tandon-5627682b0/overlay/about-this-profile/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base%3B8ZgOSSB4SZaajuW%2BPOX%2FIA%3D%3D
+- Linkedin ->https://www.linkedin.com/in/arjun-tandon-5627682b0
 <img width="1920" height="1080" alt="Screenshot from 2026-01-21 10-45-46" src="https://github.com/user-attachments/assets/cba468cf-5b55-42a7-a4cc-213aec45b4ae" />
 <img width="1920" height="1080" alt="Screenshot from 2026-01-21 11-02-46" src="https://github.com/user-attachments/assets/c4af0b99-e70d-4dfe-a8b6-f94cfa7fe8ad" />
