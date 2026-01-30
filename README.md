@@ -48,8 +48,7 @@ Expected output:
 - Testbench compares `output_matrix` vs `golden_output.hex` once `compute_done` asserts.
 
 ## Notes
-- All arithmetic is signed end-to-end (inputs, product,<img width="1920" height="1080" alt="Screenshot from 2026-01-21 11-02-46" src="https://github.com/user-attachments/assets/75e145fe-1ca2-49de-9238-6ba620cf7e0f" />
- sign-extension, accumulation).
+- All arithmetic is signed end-to-end (inputs, product, sign-extension, accumulation).
 - The design is written to be tool-friendly for open-source flows (Verilator/Yosys-style discipline).
 
 ## Author
