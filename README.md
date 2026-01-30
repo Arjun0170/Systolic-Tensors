@@ -23,7 +23,7 @@ A parametric, synthesizable systolic array for matrix multiplication, written in
 - Python 3
 - NumPy
 
-## Quickstart (16x16 demo)
+## Quickstart (64x64 demo)
 1) Generate vectors:
 ```python3 Test_generator_script.py```
 2) Build + run
