@@ -10,7 +10,6 @@ def pack_vector(vals, lane_width):
     return bits
 
 def write_os_inputs(A, rows, ip_width, k_dim, filename="input_matrix.hex"):
-    # OS: one line per k, packing A[r,k] across rows r
     hex_chars = (rows * ip_width + 3) // 4
     with open(filename, "w") as f:
         for k in range(k_dim):
@@ -18,8 +17,6 @@ def write_os_inputs(A, rows, ip_width, k_dim, filename="input_matrix.hex"):
             f.write(f"{line_bits:0{hex_chars}x}\n")
 
 def write_ws_inputs(A, rows, ip_width, k_dim, filename="input_matrix.hex"):
-    # WS: one line per (block, m). Each line packs A[m, k_block+i] across lanes i (0..rows-1).
-    # Total lines = num_blocks * rows, where num_blocks = ceil(k_dim / rows)
     num_blocks = (k_dim + rows - 1) // rows
     hex_chars = (rows * ip_width + 3) // 4
 
@@ -35,7 +32,6 @@ def write_ws_inputs(A, rows, ip_width, k_dim, filename="input_matrix.hex"):
                 f.write(f"{line_bits:0{hex_chars}x}\n")
 
 def write_weights(B, cols, ip_width, k_dim, filename="weight_matrix.hex"):
-    # Same for OS and WS: one line per k, packing B[k,c] across columns c
     hex_chars = (cols * ip_width + 3) // 4
     with open(filename, "w") as f:
         for k in range(k_dim):
@@ -43,7 +39,6 @@ def write_weights(B, cols, ip_width, k_dim, filename="weight_matrix.hex"):
             f.write(f"{line_bits:0{hex_chars}x}\n")
 
 def write_golden(C_gold, rows, cols, op_width, filename="golden_output.hex"):
-    # Single line: flatten (i,j) with (0,0) as LSB, matches output_matrix[(i*cols + j)*op +: op]
     total_bits = rows * cols * op_width
     hex_chars = (total_bits + 3) // 4
     mask = (1 << op_width) - 1
@@ -87,7 +82,6 @@ if __name__ == "__main__":
     print(f"Generating: rows={rows} cols={cols} ip={ip_w} op={op_w} k={k_dim} flow={args.flow}")
     A, B, C_gold = gen_vectors(rows, cols, ip_w, op_w, k_dim, seed=args.seed)
 
-    # Always write shared files
     write_weights(B, cols, ip_w, k_dim, filename="weight_matrix.hex")
     write_golden(C_gold, rows, cols, op_w, filename="golden_output.hex")
 
