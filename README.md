@@ -45,7 +45,7 @@ python3 -m pip install numpy
 
 ---
 
-## Quickstart — OS (example: 64×64, k=128)
+## Quickstart — OS (example: 16x16, k=128)
 
 ### 1) Generate vectors
 Run from the `OS/` directory (script name may differ):
