@@ -1,21 +1,63 @@
 # Systolic Tensors
 
-A parametric, synthesizable systolic array for matrix multiplication, written in SystemVerilog, with an automated Python/NumPy golden-model verification flow using Verilator. 
+A parametric, synthesizable systolic-array RTL for matrix multiplication in SystemVerilog, featuring **both**:
+- **Output-Stationary (OS)**
+- **Weight-Stationary (WS)**
+
+Verification is automated via a **Python/NumPy golden model** + **file-driven SystemVerilog testbenches** using **Verilator**/**Cadence Xcelium**.
+
+---
 
 ## Highlights
 - Parameterized array size: `rows x cols` and stream length `k_dim`.
-- Signed INT8-style inputs (configurable via `ip_width`) with wider accumulation (`op_width`).
-- Deterministic, file-driven verification: generates input/weight streams + golden output, runs simulation, and checks correctness.
-- Designed to scale (same PE replicated across the grid).
+- Signed INT8-style operands (configurable via `ip_width`) with wider signed accumulation (`op_width`).
+- Deterministic verification:
+  - Python generates `input_matrix.hex`, `weight_matrix.hex`, `golden_output.hex`
+  - Testbench streams tokens, waits for `compute_done`, then checks the packed output.
+- Same PE replicated across the grid (clean scaling from small to large sizes).
+- Two dataflow variants (OS + WS) to compare behavior/latency under the same harness.
+
+---
+
+## Dataflows implemented
+
+### Output-Stationary (OS)
+- `x` streams left → right  
+- `w` streams top → bottom  
+- Each PE holds its own accumulator locally (`mac_out`).
+
+**Input protocol**
+- For `k = 0 .. k_dim-1`, drive `en=1`
+- Assert `clr=1` only on the first token (`k==0`)
+- Drop `en` after feed and wait for `compute_done`
+
+### Weight-Stationary (WS)
+- Weights are loaded top → bottom, then held in a PE-local register.
+- `x` streams left → right
+- Partial sums (`psum`) stream top → bottom
+- Supports **K-tiling** via `psum_init_vec` injected per output-row token.
+
+**Input protocol (per K-tile block, tile size = `rows`)**
+1. **LOAD** phase (`en=1, clr=1`): shift weights down for `rows` cycles (reverse order inside the tile)
+2. **COMPUTE** phase (`en=1, clr=0`): feed `rows` tokens and inject `psum_init_vec` per token
+3. **DRAIN** phase (`en=0`): drain/capture skewed outputs (handled in the WS TB)
+
+---
 
 ## Repo structure
-- `systolic_array.sv` — Top-level array (skewing + PE grid + done/cycle logic)
-- `mac_unit.sv` — Processing element (pipelined MAC)
-- `Systolic_Array_TB.sv` — SystemVerilog testbench (file-driven)
-- `Test_generator_script.py` — Generates:
-  - `input_matrix.hex`
-  - `weight_matrix.hex`
-  - `golden_output.hex`
+- `OS/`
+  - `systolic_array_os.sv` — OS top-level array (skew + PE grid + done/cycle logic)
+  - `mac_unit_os.sv` — OS PE (pipelined MAC + local accumulation)
+  - `systolic_array_os_tb.sv` — OS testbench (file-driven)
+  - `test_generator_script_os.py` (or your OS generator) — generates OS-formatted `input_matrix.hex`
+
+- `WS/`
+  - `systolic_array_ws.sv` — WS top-level array (row skew + psum skew + PE grid + done/cycle logic)
+  - `mac_unit_ws.sv` — WS PE (stationary weight register + pipelined compute + vertical psum)
+  - `systolic_array_ws_tb.sv` — WS testbench (block-wise load + compute + skew-aware capture)
+  - `test_generator_script_ws.py` (or your WS generator) — generates WS-formatted `input_matrix.hex`
+
+---
 
 ## Prerequisites
 - Linux (recommended)
@@ -23,15 +65,25 @@ A parametric, synthesizable systolic array for matrix multiplication, written in
 - Python 3
 - NumPy
 
-## Quickstart (64x64 demo)
-1) Generate vectors:
-```python3 Test_generator_script.py```
-2) Build + run
+Install NumPy:
+```bash
+python3 -m pip install numpy
 ```
-verilator --binary --timing --top-module systolic_array_tb
-Systolic_Array_TB.sv systolic_array.sv mac_unit.sv
 
-./obj_dir/Systolic_Array_TB
+1) Generate vectors
+
+From the OS/ folder:
+```
+cd OS
+python3 gen.py
+```
+2) Build + run (Verilator)
+```
+verilator -Wall --binary -sv --timing \
+  --top-module systolic_array__os_tb \
+  systolic_array__os_tb.sv systolic_array_os.sv mac_unit_os.sv
+
+./obj_dir/Vsystolic_array_os_tb
 ```
 
 Expected output:
