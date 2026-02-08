@@ -3,7 +3,7 @@
 module systolic_array_ws_tb;
 
     // ------------------------------------------------------------------------
-    // Parameters
+    // Config (match generator + DUT)
     // ------------------------------------------------------------------------
     parameter int rows     = 16;
     parameter int cols     = 16;
@@ -12,19 +12,24 @@ module systolic_array_ws_tb;
     parameter int k_dim    = 128;
     parameter int pipe_lat = 3;
 
+    // K-tiling: WS uses tile size = rows (one column-load fills the array depth)
     localparam int num_blocks = (k_dim + rows - 1) / rows;
-    localparam int m_dim      = rows; // output rows (C is rows x cols)
+    localparam int m_dim      = rows; // C is [rows x cols] in this setup
 
     // ------------------------------------------------------------------------
-    // WS timing
+    // WS timing notes (important for capture)
     //
-    // TB drives AFTER posedge ( @(posedge clk); #1; ... )
-    // There are TWO registered boundaries before PE pipeline effectively starts:
-    //  1) boundary row-skew registers sample input_matrix
-    //  2) PE stage-1 registers sample x_grid/w/psum at next posedge
-    // Hence +2.
-localparam int ws_base   = (rows-1) * (pipe_lat + 1) + pipe_lat + 2;
-localparam int drain_len = ws_base + (cols-1);
+    // TB drives AFTER posedge: @(posedge clk); #1; input_matrix <= ...
+    // That means a token launched at "t" is sampled by:
+    //   1) row-skew regs at posedge (t+1)
+    //   2) PE stage-1 regs at posedge (t+2)
+    // so we use +2 in the base latency.
+    //
+    // Row skew spacing is (pipe_lat+1) because psum is a registered hop row-to-row.
+    // Column skew is 1 cycle/col because x hops right one register per col.
+    // ------------------------------------------------------------------------
+    localparam int ws_base   = (rows-1) * (pipe_lat + 1) + pipe_lat + 2;
+    localparam int drain_len = ws_base + (cols-1);
 
     // ------------------------------------------------------------------------
     // DUT I/O
@@ -44,19 +49,28 @@ localparam int drain_len = ws_base + (cols-1);
     logic [rows*cols*op_width-1:0] output_matrix;
 
     // ------------------------------------------------------------------------
-    // Test vector memories
+    // Vectors:
+    // inputs_mem  : block-major A tiles (index = b*m_dim + m)
+    // weights_mem : B rows (index = k)
+    // golden_ref  : packed full C matrix (single line)
     // ------------------------------------------------------------------------
-    logic [rows*ip_width-1:0]      inputs_mem     [0:(num_blocks*m_dim)-1];
-    logic [cols*ip_width-1:0]      weights_mem    [0:k_dim-1];
-    logic [rows*cols*op_width-1:0] golden_ref_mem [0:0];
+    logic [rows*ip_width-1:0]        inputs_mem     [0:(num_blocks*m_dim)-1];
+    logic [cols*ip_width-1:0]        weights_mem    [0:k_dim-1];
+    logic [rows*cols*op_width-1:0]   golden_ref_mem [0:0];
 
+    // Running partial sums per output row (cols-wide vector)
     logic [cols*op_width-1:0] psum_mem      [0:m_dim-1];
     logic [cols*op_width-1:0] next_psum_mem [0:m_dim-1];
 
+    // Final packed matrix for compare (same layout as golden)
     logic [rows*cols*op_width-1:0] final_packed;
 
     // ------------------------------------------------------------------------
-    // DUT instantiation
+    // DUT
+    // Protocol:
+    //   en=1,clr=1 -> load weights (rows cycles per block, reverse inject)
+    //   en=1,clr=0 -> compute tokens (m_dim cycles per block)
+    //   en=0       -> drain and capture remaining skewed outputs
     // ------------------------------------------------------------------------
     systolic_array_ws #(
         .rows(rows),
@@ -84,18 +98,21 @@ localparam int drain_len = ws_base + (cols-1);
     always #5 clk <= ~clk;
 
     // ------------------------------------------------------------------------
-    // Watchdog
+    // Watchdog (kept generous for sweeps)
     // ------------------------------------------------------------------------
     localparam int exp_total_cyc =
         num_blocks * (rows /*load*/ + m_dim /*compute*/ + drain_len /*drain*/) + 400;
 
     initial begin : watchdog
         int cyc = 0;
+
         wait (rst === 1'b0);
+
         while ((compute_done !== 1'b1) && (cyc < exp_total_cyc)) begin
             @(posedge clk);
             cyc++;
         end
+
         if (compute_done !== 1'b1) begin
             $display("ERROR: Timeout. compute_done never asserted.");
             $display("  rows=%0d cols=%0d k_dim=%0d num_blocks=%0d pipe_lat=%0d",
@@ -118,7 +135,7 @@ localparam int drain_len = ws_base + (cols-1);
         $readmemh("weight_matrix.hex", weights_mem);
         $readmemh("golden_output.hex", golden_ref_mem);
 
-        // Reset init
+        // init
         rst           = 1'b1;
         en            = 1'b0;
         clr           = 1'b0;
@@ -126,7 +143,6 @@ localparam int drain_len = ws_base + (cols-1);
         weight_matrix = '0;
         psum_init_vec = '0;
 
-        // Init partial sums to 0
         for (int m = 0; m < m_dim; m++) begin
             psum_mem[m] = '0;
         end
@@ -135,10 +151,9 @@ localparam int drain_len = ws_base + (cols-1);
         #1 rst = 1'b0;
 
         // ------------------------------------------------------------
-        // For each K-tile block:
-        //   1) load weights (reverse order within tile)
-        //   2) compute m_dim tokens, injecting psum_mem[m]
-        //   3) capture skewed outputs into next_psum_mem[m][j]
+        // Block loop (K-tiling)
+        //   Each block handles k_block .. k_block+rows-1
+        //   weights are loaded first, then m_dim tokens computed and captured
         // ------------------------------------------------------------
         for (int b = 0; b < num_blocks; b++) begin
             int k_block = b * rows;
@@ -149,25 +164,31 @@ localparam int drain_len = ws_base + (cols-1);
             // -------------------------
             // 1) LOAD WEIGHTS (reverse)
             // -------------------------
+            // Reverse inject so B[k_block+rows-1] enters first and shifts to bottom,
+            // and B[k_block+0] enters last and stays at the top row.
             for (int kk = 0; kk < rows; kk++) begin
-                int global_k = k_block + (rows - 1 - kk); // reverse inject
+                int global_k = k_block + (rows - 1 - kk);
                 @(posedge clk); #1;
 
-                en           = 1'b1;
-                clr          = 1'b1;   // LOAD mode
-                input_matrix = '0;
+                en            = 1'b1;
+                clr           = 1'b1;    // LOAD mode
+                input_matrix  = '0;
                 psum_init_vec = '0;
 
                 if (global_k < k_dim) begin
                     weight_matrix = weights_mem[global_k];
                 end else begin
-                    weight_matrix = '0;  // padding for last partial block
+                    weight_matrix = '0;   // padding for final partial block
                 end
             end
 
             // -------------------------
             // 2) COMPUTE + 3) CAPTURE
             // -------------------------
+            // next_psum_mem holds updated partial sums after this block.
+            // Capture is column-skew aware:
+            //   bottom-row col j for token m appears at time t = m + ws_base + j
+            // => m = t - ws_base - j
             for (int m = 0; m < m_dim; m++) begin
                 next_psum_mem[m] = '0;
             end
@@ -176,12 +197,14 @@ localparam int drain_len = ws_base + (cols-1);
                 @(posedge clk); #1;
 
                 if (t < m_dim) begin
+                    // Feed one output-row token per cycle (m=t)
                     en            = 1'b1;
-                    clr           = 1'b0;   // COMPUTE mode
+                    clr           = 1'b0;    // COMPUTE mode
                     input_matrix  = inputs_mem[b*m_dim + t];
-                    weight_matrix = '0;
+                    weight_matrix = '0;      // don't care during compute
                     psum_init_vec = psum_mem[t];
                 end else begin
+                    // Drain: stop issuing tokens, only capture outputs
                     en            = 1'b0;
                     clr           = 1'b0;
                     input_matrix  = '0;
@@ -189,7 +212,7 @@ localparam int drain_len = ws_base + (cols-1);
                     psum_init_vec = '0;
                 end
 
-                // CAPTURE (column-skew aware)
+                // Capture any columns that are valid in this cycle
                 for (int j = 0; j < cols; j++) begin
                     int signed m_out_s;
                     m_out_s = t - ws_base - j;
@@ -201,7 +224,7 @@ localparam int drain_len = ws_base + (cols-1);
                 end
             end
 
-            // Update psum_mem for next block (or final)
+            // Carry partial sums into next block (or final result after last block)
             for (int m = 0; m < m_dim; m++) begin
                 psum_mem[m] = next_psum_mem[m];
             end
@@ -215,7 +238,7 @@ localparam int drain_len = ws_base + (cols-1);
         weight_matrix = '0;
         psum_init_vec = '0;
 
-        // Pack psum_mem (final C) into final_packed in same layout as golden
+        // Pack psum_mem into the same flattened layout used by golden_output.hex
         final_packed = '0;
         for (int i = 0; i < rows; i++) begin
             for (int j = 0; j < cols; j++) begin
@@ -239,7 +262,7 @@ localparam int drain_len = ws_base + (cols-1);
             $display("========================================\n");
         end
 
-        // First mismatch locator
+        // First mismatch locator (helps catch timing/capture bugs quickly)
         if (final_packed !== golden_ref_mem[0]) begin
             for (int ii = 0; ii < rows; ii++) begin
                 for (int jj = 0; jj < cols; jj++) begin
@@ -247,7 +270,8 @@ localparam int drain_len = ws_base + (cols-1);
                     got = final_packed[(ii*cols + jj)*op_width +: op_width];
                     exp = golden_ref_mem[0][(ii*cols + jj)*op_width +: op_width];
                     if (got !== exp) begin
-                        $display("MISMATCH at C[%0d][%0d]: got=0x%08x exp=0x%08x", ii, jj, got, exp);
+                        $display("MISMATCH at C[%0d][%0d]: got=0x%08x exp=0x%08x",
+                                 ii, jj, got, exp);
                         disable main;
                     end
                 end
