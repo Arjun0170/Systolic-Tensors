@@ -69,15 +69,15 @@ Install NumPy:
 ```bash
 python3 -m pip install numpy
 ```
-#Quickstart — OS (example: 64x64, k=512)
-1) Generate vectors
+##Quickstart — OS (example: 64x64, k=512)
+- Generate vectors
 
 From the OS/ folder:
 ```
 cd OS
 python3 test_generator_script_os.py
 ```
-2) Build + run (Verilator)
+- Build + run (Verilator)
 ```
 verilator -Wall --binary -sv --timing \
   --top-module systolic_array_os_tb \
@@ -89,15 +89,15 @@ verilator -Wall --binary -sv --timing \
 Expected output:
 - `TEST PASSED! ...` on success
 
-#Quickstart — WS (example: 64X64, k=512)
-1) Generate vectors
+##Quickstart — WS (example: 64X64, k=512)
+- Generate vectors
 
 From the WS/ folder:
 ```
 cd WS
 python3 test_generator_script_ws.py --rows 16 --cols 16 --ip_width 8 --op_width 32 --k 128 --seed 1
 ```
-2) Build + run (Verilator)
+- Build + run (Verilator)
 ```
 verilator -Wall --binary -sv --timing \
   --top-module systolic_array_ws_tb \
@@ -121,26 +121,16 @@ If building in a directory with spaces, Verilator+Make may fail. Build/run from 
 ## Verification methodology
 
 Python generates random signed matrices:
-
-A = [rows x k_dim]
-
-B = [k_dim x cols]
-
+- `A = [rows x k_dim]`
+- `B = [k_dim x cols]`
 Golden:
-
-C_gold = A @ B (NumPy int64)
-
+- `C_gold = A @ B (NumPy int64)`
 Packed into golden_output.hex to match RTL layout:
-
-element (i,j) stored at bit offset (i*cols + j) * op_width
-
+- `element (i,j) stored at bit offset (i*cols + j) * op_width`
 Testbenches:
-
-stream inputs/weights according to the dataflow protocol
-
-wait for compute_done
-
-compare packed outputs against golden
+- `stream inputs/weights according to the dataflow protocol`
+- `wait for compute_done`
+- `compare packed outputs against golden`
 ## Notes
 - All arithmetic is signed end-to-end (inputs, product, sign-extension, accumulation).
 - The design is written to be tool-friendly for open-source flows (Verilator/Yosys-style discipline).
