@@ -69,36 +69,78 @@ Install NumPy:
 ```bash
 python3 -m pip install numpy
 ```
-
+#Quickstart — OS (example: 64x64, k=512)
 1) Generate vectors
 
 From the OS/ folder:
 ```
 cd OS
-python3 gen.py
+python3 test_generator_script_os.py
 ```
 2) Build + run (Verilator)
 ```
 verilator -Wall --binary -sv --timing \
-  --top-module systolic_array__os_tb \
-  systolic_array__os_tb.sv systolic_array_os.sv mac_unit_os.sv
+  --top-module systolic_array_os_tb \
+  systolic_array_os_tb.sv systolic_array_os.sv mac_unit_os.sv
 
-./obj_dir/Vsystolic_array_os_tb
+./obj_dir/systolic_array_os_tb
 ```
 
 Expected output:
 - `TEST PASSED! ...` on success
 
-## Scaling up (64x64, 256x256)
-- For large arrays, avoid printing the full `output_matrix` in `$display` (simulators have output formatting limits).
-- If simulation becomes slow, disable tracing/wave dumps and run “blind” for PASS/FAIL.
-- Prefer running very large configs on a workstation/server (more RAM + faster CPU).
+#Quickstart — WS (example: 64X64, k=512)
+1) Generate vectors
+
+From the WS/ folder:
+```
+cd WS
+python3 test_generator_script_ws.py --rows 16 --cols 16 --ip_width 8 --op_width 32 --k 128 --seed 1
+```
+2) Build + run (Verilator)
+```
+verilator -Wall --binary -sv --timing \
+  --top-module systolic_array_ws_tb \
+  systolic_array_ws_tb.sv systolic_array_ws.sv mac_unit_ws.sv
+
+./obj_dir/Vsystolic_array_ws_tb
+```
+Expected output:
+- `TEST PASSED! ...` on success
+
+## Notes on scaling
+
+For large sizes (64×64 and above), avoid $display of the full packed output (console formatting becomes a bottleneck).
+
+Disable waveform dumps unless debugging.
+
+WS uses K-tiling with tile size = rows. Simulation time grows quickly with array size.
+
+If building in a directory with spaces, Verilator+Make may fail. Build/run from a path without spaces.
 
 ## Verification methodology
-- Inputs/weights are streamed for `k_dim` cycles.
-- Golden output is computed in Python (NumPy `matmul`) and packed to match the RTL output layout.
-- Testbench compares `output_matrix` vs `golden_output.hex` once `compute_done` asserts.
 
+Python generates random signed matrices:
+
+A = [rows x k_dim]
+
+B = [k_dim x cols]
+
+Golden:
+
+C_gold = A @ B (NumPy int64)
+
+Packed into golden_output.hex to match RTL layout:
+
+element (i,j) stored at bit offset (i*cols + j) * op_width
+
+Testbenches:
+
+stream inputs/weights according to the dataflow protocol
+
+wait for compute_done
+
+compare packed outputs against golden
 ## Notes
 - All arithmetic is signed end-to-end (inputs, product, sign-extension, accumulation).
 - The design is written to be tool-friendly for open-source flows (Verilator/Yosys-style discipline).
