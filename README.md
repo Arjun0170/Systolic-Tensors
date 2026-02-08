@@ -95,7 +95,7 @@ Expected output:
 From the WS/ folder:
 ```
 cd WS
-python3 test_generator_script_ws.py --rows 16 --cols 16 --ip_width 8 --op_width 32 --k 128 --seed 1
+python3 test_generator_script_ws.py --rows 64 --cols 64 --ip_width 8 --op_width 32 --k 512 --seed 1
 ```
 - Build + run (Verilator)
 ```
@@ -103,7 +103,7 @@ verilator -Wall --binary -sv --timing \
   --top-module systolic_array_ws_tb \
   systolic_array_ws_tb.sv systolic_array_ws.sv mac_unit_ws.sv
 
-./obj_dir/Vsystolic_array_ws_tb
+./obj_dir/systolic_array_ws_tb
 ```
 Expected output:
 - `TEST PASSED! ...` on success
@@ -120,14 +120,14 @@ If building in a directory with spaces, Verilator+Make may fail. Build/run from 
 
 ## Verification methodology
 
-Python generates random signed matrices:
+-Python generates random signed matrices:/
 - `A = [rows x k_dim]`
 - `B = [k_dim x cols]`
-Golden:
+- Golden:/
 - `C_gold = A @ B (NumPy int64)`
-Packed into golden_output.hex to match RTL layout:
+- Packed into golden_output.hex to match RTL layout:/
 - `element (i,j) stored at bit offset (i*cols + j) * op_width`
-Testbenches:
+-Testbenches:/
 - `stream inputs/weights according to the dataflow protocol`
 - `wait for compute_done`
 - `compare packed outputs against golden`
