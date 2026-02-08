@@ -73,7 +73,7 @@ if __name__ == "__main__":
     parser.add_argument("--cols", type=int, default=64)
     parser.add_argument("--ip_width", type=int, default=8)
     parser.add_argument("--op_width", type=int, default=32)
-    parser.add_argument("--k", type=int, default=128, help="K dimension (stream length)")
+    parser.add_argument("--k", type=int, default=512, help="K dimension (stream length)")
     args = parser.parse_args()
     
     gen_systolic_vectors(args.rows, args.cols, args.ip_width, args.op_width, args.k)
