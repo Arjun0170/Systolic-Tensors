@@ -8,36 +8,53 @@ module mac_unit_os #(
     input  logic clk,
     input  logic rst,
 
-    // Token/control stream (propagates with x/w across the array)
+    // ------------------------------------------------------------------------
+    // Control token
+    // en_in  : valid for this compute token (drives pipeline + accumulator update)
+    // clr_in : sampled only when en_in=1, used to clear/initialize the local psum
+    // Both signals propagate along with x as they move across the PE row.
+    // ------------------------------------------------------------------------
     input  logic en_in,
     input  logic clr_in,
     output logic en_out,
     output logic clr_out,
 
-    // Operand streams (OS-style PE: operands pass through, psum is local)
+    // ------------------------------------------------------------------------
+    // Operand streams (Output-Stationary PE)
+    // x_new streams left -> right  (registered pass-through via x_old)
+    // w_new streams top  -> bottom (registered pass-through via w_old)
+    // mac_out is local state (psum) held inside this PE.
+    // ------------------------------------------------------------------------
     input  logic signed [IP_size-1:0] x_new,
     input  logic signed [IP_size-1:0] w_new,
     output logic signed [IP_size-1:0] x_old,
     output logic signed [IP_size-1:0] w_old,
 
-    // Local accumulator output
     output logic signed [OP_size-1:0] mac_out
 );
 
     localparam int prod_w = 2 * IP_size;
 
-    // ------------------------------------------------------------------------
-    // Stage 1: register operands + forward to neighbors, align control
-    // ------------------------------------------------------------------------
+    // =========================================================================
+    // Pipeline overview
+    //   S1: register x/w + forward to neighbors, align control (v/c)
+    //   S2: multiply stage (registered)
+    //   S3: multiply pipeline stage (registered)
+    //   S4: accumulator update (registered psum)
+    //
+    // NOTE: s2/s3 are explicit stages to keep latency predictable and consistent
+    //       across array sizes / toolflows.
+    // =========================================================================
+
+    // Stage 1 regs (operands + control)
     logic signed [IP_size-1:0] s1_x, s1_w;
     logic v1, c1;
 
-    // ------------------------------------------------------------------------
-    // Stage 2/3: pipelined multiply (kept explicit for timing/pipeline control)
-    // ------------------------------------------------------------------------
+    // Stage 2 regs (product + control)
     logic signed [prod_w-1:0] s2_p;
     logic v2, c2;
 
+    // Stage 3 regs (product + control)
     logic signed [prod_w-1:0] s3_p;
     logic v3, c3;
 
@@ -49,6 +66,9 @@ module mac_unit_os #(
             sext_prod = p[OP_size-1:0];
     endfunction
 
+    // =========================================================================
+    // Stage 1: register operands + propagate token control
+    // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
             s1_x    <= '0;
@@ -60,13 +80,13 @@ module mac_unit_os #(
             en_out  <= 1'b0;
             clr_out <= 1'b0;
         end else begin
-            // Operand pass-through (registered)
+            // Registered pass-through to neighbors
             s1_x  <= x_new;
             s1_w  <= w_new;
             x_old <= x_new;
             w_old <= w_new;
 
-            // Control follows the token
+            // Control token follows the compute wavefront
             v1 <= en_in;
             c1 <= en_in & clr_in;
 
@@ -75,6 +95,9 @@ module mac_unit_os #(
         end
     end
 
+    // =========================================================================
+    // Stage 2: multiply (registered)
+    // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
             v2   <= 1'b0;
@@ -87,6 +110,9 @@ module mac_unit_os #(
         end
     end
 
+    // =========================================================================
+    // Stage 3: extra pipe stage for timing/latency control
+    // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
             v3   <= 1'b0;
@@ -99,9 +125,12 @@ module mac_unit_os #(
         end
     end
 
-    // ------------------------------------------------------------------------
-    // Stage 4: accumulate (clr token resets psum; optional load-first behavior)
-    // ------------------------------------------------------------------------
+    // =========================================================================
+    // Stage 4: accumulate into local psum
+    // clr behavior:
+    //   - when c3=1 (valid clr token): either load first product (common GEMM init)
+    //     or clear to zero depending on clr_load_first.
+    // =========================================================================
     always_ff @(posedge clk) begin
         if (rst) begin
             mac_out <= '0;
