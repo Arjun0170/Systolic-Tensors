@@ -11,13 +11,13 @@ module systolic_array_ws #(
     input  logic rst,
 
     input  logic en,
-    input  logic clr,                   // en=1,clr=1 => LOAD WEIGHTS
-                                        // en=1,clr=0 => COMPUTE
+    input  logic clr,                  
+   
 
-    input  logic [rows*ip_width-1:0] input_matrix,   // COMPUTE: packs A[m][k_block + i]
-    input  logic [cols*ip_width-1:0] weight_matrix,  // LOAD:    packs B[k][j]
+    input  logic [rows*ip_width-1:0] input_matrix,   
+    input  logic [cols*ip_width-1:0] weight_matrix,  
 
-    input  logic [cols*op_width-1:0] psum_init_vec,   // NEW: for K-tiling accumulation
+    input  logic [cols*op_width-1:0] psum_init_vec,   
 
     output logic compute_done,
     output logic [31:0] cycles_count,
