@@ -55,7 +55,7 @@ WS holds weights stationary inside each PE and streams partial sums vertically.
 
 ---
 
-## Repo structure (typical)
+## Repo structure 
 
 **OS/**
 - `mac_unit_os.sv` — pipelined INT8 MAC PE (local accumulation)
