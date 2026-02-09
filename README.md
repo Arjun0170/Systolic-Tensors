@@ -1,124 +1,107 @@
 # Systolic Tensors
 
-A parametric, synthesizable systolic array for matrix multiplication, written in **SystemVerilog**, with an automated **Python/NumPy golden-model verification** flow using **Verilator**.
+Parameterized, synthesizable **INT8 GEMM systolic arrays** in **SystemVerilog**, implementing **two dataflows**:
+- **Output-Stationary (OS)**
+- **Weight-Stationary (WS)**
 
-This repo contains **two dataflows**:
-- **OS (Output-Stationary)**
-- **WS (Weight-Stationary)**
-
----
-
-## Highlights
-- Parameterized array size: `rows x cols` and stream length `k_dim`.
-- Signed INT8-style operands (configurable via `ip_width`) with wider signed accumulation (`op_width`).
-- Deterministic, file-driven verification: Python generates vectors + golden output, TB streams them and checks correctness.
-- Designed to scale (same PE replicated across the grid).
+Both designs are verified using a **Python/NumPy golden model** and **Cadence Xcelium/SimVision**.
 
 ---
 
-## Repo structure
+## What this repo contains
 
-### OS/
-- `systolic_array_os.sv` — OS top-level array (skew + PE grid + done/cycle logic)
-- `mac_unit_os.sv` — OS PE (pipelined MAC, local accumulation)
-- `systolic_array_os_tb.sv` — OS testbench (file-driven)
-- `gen.py` — Python generator (OS format)
+This project implements matrix multiplication:
 
-### WS/
-- `systolic_array_ws.sv` — WS top-level array (weight-load + skew + PE grid + done/cycle logic)
-- `mac_unit_ws.sv` — WS PE (stationary weight reg + pipelined compute + vertical psum)
-- `systolic_array_ws_tb.sv` — WS testbench (tiling + skew-aware capture)
-- `gen.py` — Python generator (WS format)
+- **A**: `[rows × k_dim]`  (signed INT8-style inputs, configurable)
+- **B**: `[k_dim × cols]`  (signed INT8-style weights, configurable)
+- **C = A × B**: `[rows × cols]` (wider accumulation)
 
----
+The core is written as reusable generators parameterized by:
+- `rows`, `cols`  → array size `N×N`
+- `ip_width`      → input bit-width (typically 8)
+- `op_width`      → accumulator/output width
+- `k_dim`         → GEMM K dimension (stream length)
+- `pipe_lat`      → pipeline latency inside the PE/MAC
 
-## Prerequisites
-- Linux (recommended)
-- Verilator (v5+ recommended)
-- Python 3
-- NumPy
-
-Install NumPy:
-```bash
-python3 -m pip install numpy
-```
+Supported scales (tested): **8×8 → 256×256** (parameterized beyond).
 
 ---
 
-## Quickstart — OS (example: 16x16, k=128)
+## Design overview
 
-### 1) Generate vectors
-Run from the `OS/` directory (script name may differ):
-```bash
-cd OS
-python3 gen.py
-```
+### 1) Output-Stationary (OS)
+OS keeps the partial sum **inside each PE** while operands stream through.
 
-### 2) Build + run (Verilator)
-```bash
-verilator -Wall --binary -sv --timing \
-  --top-module systolic_array_os_tb \
-  systolic_array_os_tb.sv systolic_array_os.sv mac_unit_os.sv
-
-./obj_dir/Vsystolic_array_os_tb
-```
-
-**Expected:**
-- `TEST PASSED! ...`
+**Key points**
+- **Operand pass-through**: activations/weights propagate across the array.
+- **Local accumulation**: each PE accumulates its own output element.
+- **Wavefront alignment**: row/column skew buffers ensure correct timing alignment at large `N`.
+- Simple streaming interface: `en/clr` token control + packed input/weight vectors.
 
 ---
 
-## Quickstart — WS (example: 16×16, k=128)
+### 2) Weight-Stationary (WS)
+WS holds weights stationary inside each PE and streams partial sums vertically.
 
-### 1) Generate vectors
-Run from the `WS/` directory (script name may differ):
-```bash
-cd WS
-python3 gen.py --rows 16 --cols 16 --ip_width 8 --op_width 32 --k 128 --seed 1
-```
-
-### 2) Build + run (Verilator)
-```bash
-verilator -Wall --binary -sv --timing \
-  --top-module systolic_array_ws_tb \
-  systolic_array_ws_tb.sv systolic_array_ws.sv mac_unit_ws.sv
-
-./obj_dir/Vsystolic_array_ws_tb
-```
-
-**Expected:**
-- `WS TEST PASSED! ...`
+**Key points**
+- **Explicit weight-load phase**:
+  - stationary weight register per PE
+  - vertical weight shifting during load
+- **Vertical PSUM streaming** during compute
+- **K-tiling support**:
+  - tile size = `rows`
+  - partial sums are **re-injected across tiles** via `psum_init_vec`
+- Timing-correct behavior maintained via skew-aware injection/capture handling.
 
 ---
 
-## Notes on scaling
-- For large sizes (64×64 and above), avoid `$display` of the full packed output (console formatting becomes a bottleneck).
-- Disable waveform dumps unless debugging.
-- WS uses K-tiling with tile size = `rows`. Simulation time grows quickly with array size.
-- If building in a directory with spaces, Verilator+Make may fail. Build/run from a path **without spaces**.
+## Repo structure (typical)
+
+**OS/**
+- `mac_unit_os.sv` — pipelined INT8 MAC PE (local accumulation)
+- `systolic_array_os.sv` — OS array top (skew + PE grid + done/cycle logic)
+- `systolic_array_os_tb.sv` — file-driven OS testbench
+- `test_generator_script_os.py` — Python generator for OS inputs/weights/golden
+
+**WS/**
+- `mac_unit_ws.sv` — WS PE (stationary weight + vertical psum accumulate)
+- `systolic_array_ws.sv` — WS array top (row skew + psum top skew + PE grid)
+- `systolic_array_ws_tb.sv` — WS tiled testbench (load/compute/capture per K-tile)
+- `test_generator_script_ws.py` — Python generator for WS tiled stimulus + golden
+
+> File names may differ slightly depending on your working directory, but the OS/WS split and roles remain the same.
 
 ---
 
-## Verification methodology
-Python generates random signed matrices:
-- `A = [rows x k_dim]`
-- `B = [k_dim x cols]`
+## Verification methodology (Xcelium)
 
-Golden:
-- `C_gold = A @ B`
+Verification is **file-driven and deterministic**:
+1. Python generates random signed matrices `A` and `B`.
+2. NumPy computes the golden reference:
+   - `C_gold = A @ B`
+3. Python packs streams into HEX files:
+   - `input_matrix.hex`
+   - `weight_matrix.hex`
+   - `golden_output.hex`
+4. Xcelium testbenches load HEX files with `$readmemh`, run the design, and compare:
+   - OS compares the full packed output at `compute_done`.
+   - WS runs tiled blocks, reinjects partial sums, captures the bottom-row results with skew-aware timing, and compares final packed output.
 
-The generator packs:
-- `input_matrix.hex` / `weight_matrix.hex` to match the RTL streaming format
-- `golden_output.hex` to match RTL packed output layout  
-  (element `(i,j)` stored at bit offset `(i*cols + j) * op_width`)
+Debug was performed using **Cadence SimVision** with cycle-level latency accounting and boundary-condition validation.
+
+---
+
+## Notes / Implementation choices
+
+- **Signed arithmetic end-to-end** (inputs, product, sign-extension, accumulation).
+- **Explicit pipeline staging** inside PEs for timing-friendly RTL.
+- **Wavefront-correct skewing** designed to scale without rewriting RTL.
+- **Completion logic** (`compute_done`, `cycles_count`) is designed to be sweep-safe for automated experiments.
 
 ---
 
 ## Author
-Arjun Tandon  
-GitHub: https://github.com/Arjun0170  
-LinkedIn: https://www.linkedin.com/in/arjun-tandon-5627682b0  
 
-<img width="1920" height="1080" alt="Screenshot from 2026-01-21 10-45-46" src="https://github.com/user-attachments/assets/cba468cf-5b55-42a7-a4cc-213aec45b4ae" />
-<img width="1920" height="1080" alt="Screenshot from 2026-01-21 11-02-46" src="https://github.com/user-attachments/assets/c4af0b99-e70d-4dfe-a8b6-f94cfa7fe8ad" />
-
+**Arjun Tandon**  
+GitHub: `github.com/Arjun0170`  
+LinkedIn: `linkedin.com/in/arjun-tandon-5627682b0`
