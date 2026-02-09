@@ -69,8 +69,6 @@ WS holds weights stationary inside each PE and streams partial sums vertically.
 - `systolic_array_ws_tb.sv` — WS tiled testbench (load/compute/capture per K-tile)
 - `test_generator_script_ws.py` — Python generator for WS tiled stimulus + golden
 
-> File names may differ slightly depending on your working directory, but the OS/WS split and roles remain the same.
-
 ---
 
 ## Verification methodology (Xcelium)
