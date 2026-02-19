@@ -1,8 +1,8 @@
 `timescale 1ns/10ps
 
 module systolic_array_ws #(
-    parameter int rows = 16,
-    parameter int cols = 16,
+    parameter int rows = 64,
+    parameter int cols = 64,
     parameter int ip_width = 8,
     parameter int op_width = 32,
     parameter int pipe_lat = 3
