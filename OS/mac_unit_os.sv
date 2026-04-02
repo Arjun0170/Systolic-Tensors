@@ -58,14 +58,6 @@ module mac_unit_os #(
     logic signed [prod_w-1:0] s3_p;
     logic v3, c3;
 
-    // Sign-extend product to accumulator width (or truncate if OP_size < prod_w)
-    function automatic logic signed [OP_size-1:0] sext_prod(input logic signed [prod_w-1:0] p);
-        if (OP_size >= prod_w)
-            sext_prod = {{(OP_size - prod_w){p[prod_w-1]}}, p};
-        else
-            sext_prod = p[OP_size-1:0];
-    endfunction
-
     // =========================================================================
     // Stage 1: register operands + propagate token control
     // =========================================================================
@@ -136,8 +128,7 @@ module mac_unit_os #(
             mac_out <= '0;
         end else if (v3) begin
             logic signed [OP_size-1:0] addend;
-            addend = sext_prod(s3_p);
-
+            addend = { { (OP_size - prod_w) {s3_p[prod_w-1]} }, s3_p };
             if (c3) begin
                 mac_out <= (clr_load_first) ? addend : '0;
             end else begin
