@@ -1,0 +1,53 @@
+{
+  "layer": "fc1",
+  "M": 16,
+  "K": 784,
+  "N": 64,
+  "array": [
+    16,
+    16
+  ],
+  "n_tiles": 4,
+  "tiles": [
+    {
+      "dir": "rtl_cases/tile_r0_c0",
+      "row0": 0,
+      "col0": 0,
+      "valid_rows": 16,
+      "valid_cols": 16,
+      "k_dim": 784,
+      "rows": 16,
+      "cols": 16
+    },
+    {
+      "dir": "rtl_cases/tile_r0_c16",
+      "row0": 0,
+      "col0": 16,
+      "valid_rows": 16,
+      "valid_cols": 16,
+      "k_dim": 784,
+      "rows": 16,
+      "cols": 16
+    },
+    {
+      "dir": "rtl_cases/tile_r0_c32",
+      "row0": 0,
+      "col0": 32,
+      "valid_rows": 16,
+      "valid_cols": 16,
+      "k_dim": 784,
+      "rows": 16,
+      "cols": 16
+    },
+    {
+      "dir": "rtl_cases/tile_r0_c48",
+      "row0": 0,
+      "col0": 48,
+      "valid_rows": 16,
+      "valid_cols": 16,
+      "k_dim": 784,
+      "rows": 16,
+      "cols": 16
+    }
+  ]
+}
