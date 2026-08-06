@@ -1,0 +1,77 @@
+SYSTOLIC_ML SETUP AND RUN COMMANDS (Ubuntu / WSL)
+=================================================
+
+Open Ubuntu/WSL, then enter the project directory:
+
+  cd ~/Systolic-Tensors/systolic_ml
+
+FIRST-TIME SETUP
+----------------
+
+The setup script creates an isolated .venv and installs NumPy and the official
+CPU build of PyTorch. This project trains on CPU, so CUDA libraries are not
+needed:
+
+  chmod +x setup.sh run_project.sh
+  ./setup.sh
+
+If Python or venv support is missing, install the Ubuntu packages first:
+
+  sudo apt update
+  sudo apt install -y python3 python3-venv python3-pip
+  ./setup.sh
+
+RUN THE PROJECT
+---------------
+
+Run INT8 inference using the included mlp_weights.npz (default):
+
+  ./run_project.sh
+
+or:
+
+  ./run_project.sh infer
+
+Generate and verify RTL test-vector tiles under rtl_cases/:
+
+  ./run_project.sh array
+
+Retrain the MLP and replace mlp_weights.npz:
+
+  ./run_project.sh train
+
+Train, infer, and generate RTL vectors in sequence:
+
+  ./run_project.sh all
+
+MANUAL COMMANDS (WITHOUT THE HELPER SCRIPTS)
+---------------------------------------------
+
+  cd ~/Systolic-Tensors/systolic_ml
+  python3 -m venv .venv
+  source .venv/bin/activate
+  python -m pip install --upgrade pip
+  python -m pip install -r requirements.txt
+  python train_mlp.py
+  python infer_int8.py
+  python run_on_array.py
+
+Activate the existing environment in a new terminal:
+
+  cd ~/Systolic-Tensors/systolic_ml
+  source .venv/bin/activate
+
+Leave the virtual environment when finished:
+
+  deactivate
+
+REPAIR / UPDATE DEPENDENCIES
+----------------------------
+
+The setup script is safe to run again:
+
+  ./setup.sh
+
+Show script help:
+
+  ./run_project.sh --help
